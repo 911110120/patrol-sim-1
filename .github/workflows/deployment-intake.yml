@@ -1,0 +1,30 @@
+name: 部署报名检查
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: deployment-intake-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-submission:
+    name: 检查部署材料
+    if: github.repository == 'Yhimhas/patrol-sim'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # 只检出触发工作流的上游 main 提交。PR 正文由脚本作为数据读取。
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: 检查报名并更新 PR 评论
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/check-deployment-intake.py
