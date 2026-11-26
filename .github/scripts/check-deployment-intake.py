@@ -234,7 +234,7 @@ def main():
     elif incomplete and status != "待补充":
         status = "暂未完成"
     if status == "通过":
-        notes.append("Git 和 PR 规范检查通过。请保持 PR 为 Open，等待工作组发出 Coolify 邀请。")
+        notes.append("Git 和 PR 规范检查通过。请保持 PR 为 Open，等待工作组部署并提供展示地址。")
 
     if pr_snapshot(api(pr_endpoint)) != pr_snapshot(pr):
         return 0

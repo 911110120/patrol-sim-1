@@ -44,6 +44,6 @@
 - [ ] PR 目标是 `Yhimhas/patrol-sim:main`，已按[报名规则](https://github.com/Yhimhas/patrol-sim/blob/main/docs/01_项目需求.md#培训班部署报名-pr)核对标题、来源分支和 Commit。
 - [ ] 环境变量在公开 PR 中只填写名称，提交中的配置文件使用示例值。
 
-创建 PR 后，请通过工作组指定的私下渠道提交 **PR 编号、用于接受 Coolify 邀请的邮箱、所需环境变量的实际值（如有）**。
+公网部署由工作组统一完成。应用需要环境变量实际值时，请通过工作组指定的加密渠道提交，附上 **PR 编号**。收到展示地址后，请验证核心功能并更新项目的 README。
 
-[学员部署操作流程](https://github.com/Yhimhas/patrol-sim/blob/main/docs/05_学员部署操作流程.md)
+[部署报名与公网验收](https://github.com/Yhimhas/patrol-sim/blob/main/docs/05_学员部署操作流程.md)
