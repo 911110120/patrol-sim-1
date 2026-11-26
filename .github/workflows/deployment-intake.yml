@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   check-submission:
-    name: 检查部署材料
+    name: 检查 Git 规范和部署材料
     if: github.repository == 'Yhimhas/patrol-sim'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -19,7 +19,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      # 只检出触发工作流的上游 main 提交。PR 正文由脚本作为数据读取。
+      # 只检出触发工作流的上游 main 提交。通过 GitHub API 读取 PR 和 Commit 信息。
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.sha }}

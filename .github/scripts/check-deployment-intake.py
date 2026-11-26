@@ -9,6 +9,13 @@ from urllib.request import Request, urlopen
 
 COMMENT_MARKER = "<!-- patrol-sim-deployment-intake -->"
 FIELDS = ("小组或个人", "完成内容", "镜像", "容器端口", "环境变量名称", "验证路径")
+CHANGE_TYPES = r"feat|fix|docs|chore|test|ci|build|refactor|perf|style|revert"
+SOURCE_BRANCH = re.compile(rf"(?:deploy|{CHANGE_TYPES})/[^/\s]+")
+PR_TITLE = re.compile(r"部署报名\s*[|｜]\s*([^|｜]+)\s*[|｜]\s*([^|｜]+)")
+COMMIT_TITLE = re.compile(rf"(?:{CHANGE_TYPES})(?:\([^():：\s]+\))?!?[:：]\s*(.+)")
+VAGUE_TITLES = {"update", "test", "add", "fix", "docs", "111", "更新", "测试", "添加", "修改", "提交", "新增", "修复"}
+# PR #1 was already open when these rules were added.
+FIRST_SUBMISSION_HEAD = "5e94f6882ede5726eacea6fb51e1ccb23279dd68"
 REPOSITORY_COMPONENT = r"[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*"
 IMAGE_REFERENCE = re.compile(
     r"(?P<registry>[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?)/"
@@ -79,6 +86,73 @@ def validate_fields(body):
     return errors, image
 
 
+def commit_subject_problem(commit):
+    if len(commit["parents"]) > 1:
+        return False
+    subject = commit["commit"]["message"].partition("\n")[0].strip()
+    match = COMMIT_TITLE.fullmatch(subject)
+    if not match:
+        return True
+    summary = match[1].strip()
+    return not 2 <= len(summary) <= 50 or summary.casefold() in VAGUE_TITLES
+
+
+def list_pr_commits(api, endpoint, expected):
+    if expected > 250:
+        raise ValueError("GitHub returns at most 250 commits per pull request")
+    commits = []
+    for offset in range(0, expected, 100):
+        commits.extend(api(f"{endpoint}/commits?per_page=100&page={offset // 100 + 1}"))
+    if len(commits) != expected:
+        raise ValueError("PR changed during inspection or the commit list is incomplete")
+    return commits
+
+
+def prior_commits(commits, baseline):
+    by_sha = {commit["sha"]: commit for commit in commits}
+    seen = set()
+    pending = [baseline]
+    while pending:
+        sha = pending.pop()
+        if sha in by_sha and sha not in seen:
+            seen.add(sha)
+            pending.extend(parent["sha"] for parent in by_sha[sha]["parents"])
+    return seen
+
+
+def check_pr_conventions(api, endpoint, pr):
+    errors = []
+    notes = []
+    legacy_main = pr["number"] == 1 and pr["head"]["ref"] == "main"
+    if not legacy_main and not SOURCE_BRANCH.fullmatch(pr["head"]["ref"]):
+        errors.append("来源分支请用 `deploy/<组名>` 或 `<类型>/<任务>`，例如 `deploy/group-02`。")
+
+    title = PR_TITLE.fullmatch(pr["title"].strip())
+    if not title or any(not part.strip() for part in title.groups()):
+        errors.append("PR 标题请写成「部署报名｜组名｜项目名」。个人可用本人 GitHub 用户名作为组名。")
+
+    incomplete = False
+    try:
+        commits = list_pr_commits(api, endpoint, pr["commits"])
+        exempt = prior_commits(commits, FIRST_SUBMISSION_HEAD) if pr["number"] == 1 else set()
+        if legacy_main or exempt:
+            notes.append("PR #1 可沿用原报名分支，既有提交已保留。后续新增的 Commit 按新规范检查。")
+        invalid = [
+            commit["sha"][:7] for commit in commits
+            if commit["sha"] not in exempt and commit_subject_problem(commit)
+        ]
+        if invalid:
+            sample = "、".join(f"`{sha}`" for sha in invalid[:10])
+            errors.append(
+                f"有 {len(invalid)} 个 Commit 标题不符合规范（前 10 个：{sample}）。"
+                "示例 `feat(frontend): 增加手动控制`，说明写 2–50 个字符并交代具体改动。"
+            )
+    except (URLError, TimeoutError, ValueError):
+        incomplete = True
+        notes.append("GitHub 未返回完整的 Commit 列表，请重试或由工作组核对。")
+    return errors, notes, incomplete
+
+
 def check_ghcr_platform(repository, digest):
     query = urlencode({"service": "ghcr.io", "scope": f"repository:{repository}:pull"})
     token = request_json(f"{GHCR}/token?{query}")["token"]
@@ -113,10 +187,14 @@ def check_submission(body):
 
     if not supported:
         return "待补充", ["该摘要未提供 `linux/amd64` 镜像。请重新发布并更新 PR 中的摘要。"]
-    return "通过", [
-        "报名字段齐全，GHCR 镜像摘要可匿名访问，支持 `linux/amd64`。",
-        "PR 保持 Open，等工作组配置好 Coolify 应用并发出邀请后再部署。",
-    ]
+    return "通过", ["报名字段齐全，GHCR 镜像摘要可匿名访问，支持 `linux/amd64`。"]
+
+
+def pr_snapshot(pr):
+    return (
+        *(pr[key] for key in ("body", "title", "state", "draft", "commits")),
+        pr["head"]["ref"], pr["head"]["sha"], pr["base"]["ref"], pr["base"]["sha"],
+    )
 
 
 def update_comment(api, pr_number, text):
@@ -149,15 +227,22 @@ def main():
     if pr["state"] != "open" or pr["draft"] or pr["base"]["ref"] != "main":
         return 0
 
-    status, notes = check_submission(pr["body"] or "")
-    latest = api(pr_endpoint)
-    if any(latest[key] != pr[key] for key in ("body", "state", "draft")) or latest["base"]["ref"] != "main":
+    errors, notes, incomplete = check_pr_conventions(api, pr_endpoint, pr)
+    status, submission_notes = check_submission(pr["body"] or "")
+    if errors:
+        status = "待补充"
+    elif incomplete and status != "待补充":
+        status = "暂未完成"
+    if status == "通过":
+        notes.append("Git 和 PR 规范检查通过。请保持 PR 为 Open，等待工作组发出 Coolify 邀请。")
+
+    if pr_snapshot(api(pr_endpoint)) != pr_snapshot(pr):
         return 0
 
     comment = "\n".join([
         COMMENT_MARKER, f"### 部署报名检查 · {status}", "",
-        *(f"- {note}" for note in notes), "",
-        "本检查范围是报名信息和镜像元数据。项目功能由学员部署后验证。",
+        *(f"- {note}" for note in [*errors, *notes, *submission_notes]), "",
+        "机器人核对 Git 和 PR 规范、报名信息及镜像元数据。项目功能由学员部署后验证。",
     ])
     update_comment(api, pr_number, comment)
     print(f"部署报名检查 · {status}")
