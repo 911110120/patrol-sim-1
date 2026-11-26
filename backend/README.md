@@ -2,7 +2,7 @@
 
 ## 功能与环境
 
-- 已实现：地图与机器人状态查询、四方向手动移动校验、A* 路径规划、前方障碍传感器、自动巡检状态机、复位。
+- 已实现：地图与机器人状态查询、四方向手动移动校验、A* 路径规划、前方障碍传感器、自动巡检状态机、复位；巡检返航、运行统计（步数/路径长度/耗时/覆盖率）、地图障碍增删切换、动态障碍开关与受阻自动重规划。
 - 后端使用 Python 3.13 + FastAPI + Uvicorn；仿真逻辑在 `app/simulator/`，不依赖 HTTP 或浏览器，可独立测试。
 - 本地运行需要 Python 3.13 及以上版本。
 
@@ -38,6 +38,9 @@
 - **路径规划**：`POST /api/plan`，请求体 `{"target":{"x":9,"y":2}}`，返回 `{ok, path, reason}`。
 - **传感器读数**：`GET /api/sensor`。
 - **自动巡检**：`POST /api/patrol/start`、`POST /api/patrol/stop`。
+- **手动返航**：`POST /api/return-home`，规划并返回起点。
+- **切换障碍**：`POST /api/map/toggle`，请求体 `{"x":5,"y":5}`，在该格放置或移除障碍。
+- **动态障碍开关**：`POST /api/map/dynamic`，请求体 `{"enabled":true}`，开启后障碍后台随机扰动。
 - **复位**：`POST /api/reset`。
 
 ## 构建与检查
