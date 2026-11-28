@@ -211,6 +211,10 @@
     try {
       const state = await API.requestJSON("/api/state");
       View.render(state);
+      // 巡检结束（含返航到达起点）后用后端结果覆盖“正在前往检查点”的旧提示。
+      if (state.patrol && !state.patrol.active && state.patrol.completed) {
+        showStatus(state.patrol.message || "巡检完成。");
+      }
     } catch (error) {
       showStatus(error.message, "error");
     } finally {
