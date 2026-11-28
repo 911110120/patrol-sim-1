@@ -8,7 +8,7 @@
 
 ## 部署信息
 
-- 镜像：`ghcr.io/911110120/patrol-sim@sha256:336e278c19fdc5f05346d5ffd195e8572d494a6890429c53c9bb6c239cd169ea`
+- 镜像：`ghcr.io/911110120/patrol-sim@sha256:3e9ecf8b5d2be80880877e9eb5da7eb115a5041948cf6cd07a9e7b84a969f685`
 - 容器端口：`8000`
 - 环境变量名称：无
 - 验证路径：`/`、`/api/health`、`/api/state`

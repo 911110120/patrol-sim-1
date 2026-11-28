@@ -166,3 +166,27 @@ def test_patrol_completes_and_returns_home(sim: Simulator):
         time.sleep(0.02)
     assert state["patrol"]["completed"] is True
     assert (state["robot"]["x"], state["robot"]["y"]) == (0, 0)
+
+
+def test_patrol_accumulates_path_length(sim: Simulator):
+    """巡检内部规划必须计入路径长度，否则面板会出现「走 38 步但路径长度 0」。"""
+    assert sim.state()["stats"]["pathLength"] == 0
+    sim.patrol_start()
+    deadline = time.time() + 5
+    state = sim.state()
+    while time.time() < deadline:
+        state = sim.state()
+        if state["patrol"]["completed"]:
+            break
+        time.sleep(0.02)
+    assert state["patrol"]["completed"] is True
+    stats = state["stats"]
+    assert stats["steps"] > 0
+    assert stats["pathLength"] >= stats["steps"]
+
+
+def test_reset_clears_path_length(sim: Simulator):
+    sim.plan(sim.robot_position(), Position(9, 2))
+    assert sim.state()["stats"]["pathLength"] > 0
+    sim.reset()
+    assert sim.state()["stats"]["pathLength"] == 0

@@ -152,11 +152,17 @@ class Simulator:
                 return {"ok": False, "path": [], "reason": "起点或目标点在地图范围之外"}
             if self._world.is_obstacle(start) or self._world.is_obstacle(goal):
                 return {"ok": False, "path": [], "reason": "起点或目标点位于障碍物上"}
-            path = planner.plan(self._world, start, goal)
+            path = self._plan_and_count_locked(start, goal)
             if path is None:
                 return {"ok": False, "path": [], "reason": "目标点不可达，中间被边界或障碍物隔开"}
-            self._path_length += len(path)
             return {"ok": True, "path": [p.as_dict() for p in path], "reason": ""}
+
+    def _plan_and_count_locked(self, start: Position, goal: Position):
+        """统一的规划入口：成功规划出的路径计入累计路径长度。"""
+        path = planner.plan(self._world, start, goal)
+        if path is not None:
+            self._path_length += len(path)
+        return path
 
     def _touch_clock(self) -> None:
         if self._started_at is None:
@@ -291,7 +297,7 @@ class Simulator:
                 self._robot_status = "idle"
                 self._patrol_message = "巡检完成：已全部到达并返回起点"
                 return
-            path = planner.plan(self._world, self._robot_pos, self._world.start)
+            path = self._plan_and_count_locked(self._robot_pos, self._world.start)
             if path is None:
                 self._patrol_active = False
                 self._robot_status = "error"
@@ -306,7 +312,7 @@ class Simulator:
         if target is None:
             self._returning = True
             self._patrol_message = "检查点已全部到达，正在返航…"
-            path = planner.plan(self._world, self._robot_pos, self._world.start)
+            path = self._plan_and_count_locked(self._robot_pos, self._world.start)
             if path is None:
                 self._patrol_active = False
                 self._robot_status = "error"
@@ -316,7 +322,7 @@ class Simulator:
             self._patrol_path = path[1:]
             return
 
-        path = planner.plan(self._world, self._robot_pos, target)
+        path = self._plan_and_count_locked(self._robot_pos, target)
         if path is None:
             self._patrol_active = False
             self._robot_status = "error"
